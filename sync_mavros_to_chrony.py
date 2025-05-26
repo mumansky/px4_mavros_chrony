@@ -11,9 +11,9 @@ class shmTime(ctypes.Structure):
     _fields_ = [
         ("mode", ctypes.c_int),
         ("count", ctypes.c_int),
-        ("clockTimeStampSec", ctypes.c_long),  # changed from c_time_t
+        ("clockTimeStampSec", ctypes.c_long),  
         ("clockTimeStampUSec", ctypes.c_int),
-        ("receiveTimeStampSec", ctypes.c_long),  # changed from c_time_t
+        ("receiveTimeStampSec", ctypes.c_long),  
         ("receiveTimeStampUSec", ctypes.c_int),
         ("leap", ctypes.c_int),
         ("precision", ctypes.c_int),
