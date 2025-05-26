@@ -7,16 +7,20 @@ A simple MAVROS to chrony forwarder for synchronizing an FCU to a companion comp
 * Your autopilot has a GPS lock and valid timesync
 
 ## Installation
-1. Install sysv_ipc
-````pip install sysv_ipc````
+1. Install sysv_ipc.
+
+```pip install sysv_ipc```
 
 2. Add SHM (shared host memory) source to /etc/chrony.conf as preferred:
+
 ```refclock SHM 0 poll 3 refid PX4 prefer```
 
 3. Restart chronyd service
+
 ```sudo systemctl restart chronyd```
 
 4. Run the python program 
+
 ```python3 sync_mavros_to_chrony.py```
 
 5. Verify your chrony services in a seperate terminal
@@ -60,6 +64,6 @@ Leap status     : Normal
 ```
 
 # What this doesn't do (yet)?
-* Check for valid time sync
-* Handle any kind of interruptions
+* Check for valid time sync on the autopilot
+* Handle any kind of interruptions or disconnects
 * Handle no GPS startup or GPS loss situations
