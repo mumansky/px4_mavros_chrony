@@ -45,6 +45,17 @@ class TimeToSHM(Node):
             print("[DEBUG] Trying to create shared memory segment...")
             self.shm = sysv_ipc.SharedMemory(self.shm_key, sysv_ipc.IPC_CREAT, size=self.shm_size, mode=0o666)
             print("[DEBUG] Shared memory segment created.")
+        except sysv_ipc.PermissionsError:
+            print("[DEBUG] Permissions error: removing existing segment and retrying...")
+            try:
+                existing = sysv_ipc.SharedMemory(self.shm_key)
+                existing.remove()
+                print("[DEBUG] Removed existing shared memory segment.")
+                self.shm = sysv_ipc.SharedMemory(self.shm_key, sysv_ipc.IPC_CREAT, size=self.shm_size, mode=0o666)
+                print("[DEBUG] Shared memory segment created after removal.")
+            except Exception as e:
+                print(f"[ERROR] Failed to remove and recreate SHM: {e}")
+                raise
         except sysv_ipc.ExistentialError:
             print("[DEBUG] Shared memory segment exists, attaching...")
             self.shm = sysv_ipc.SharedMemory(self.shm_key)
