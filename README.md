@@ -1,23 +1,23 @@
 # px4_mavros_chrony
-A simple MAVROS to chrony source for synchronizing a FCU to a companion computer
+A simple MAVROS to chrony forwarder for synchronizing an FCU to a companion computer.
 
 ## Prequisites and Assumptions
 * [mavros](https://github.com/mavlink/mavros) is installed and running on your host machine connected to a MAVLINK compliant autopilot
 * `/mavros/time_reference` is the ROS2 topic
-* Your autopilot has a GPS lock
+* Your autopilot has a GPS lock and valid timesync
 
 ## Installation
 1. Install sysv_ipc
-`pip install sysv_ipc`
+````pip install sysv_ipc````
 
-2. Add SHM (shared host memory) source to /etc/chrony.conf as preferred
-`refclock SHM 0 poll 3 refid PX4 prefer`
+2. Add SHM (shared host memory) source to /etc/chrony.conf as preferred:
+```refclock SHM 0 poll 3 refid PX4 prefer```
 
 3. Restart chronyd service
-`sudo systemctl restart chronyd`
+```sudo systemctl restart chronyd```
 
 4. Run the python program 
-`python3 sync_mavros_to_chrony.py
+```python3 sync_mavros_to_chrony.py```
 
 5. Verify your chrony services in a seperate terminal
 
@@ -58,3 +58,8 @@ Root dispersion : 0.000728063 seconds
 Update interval : 8.0 seconds
 Leap status     : Normal
 ```
+
+# What this doesn't do (yet)?
+* Check for valid time sync
+* Handle any kind of interruptions
+* Handle no GPS startup or GPS loss situations
