@@ -9,19 +9,27 @@ A simple MAVROS to chrony forwarder for synchronizing an FCU to a companion comp
 ## Installation
 1. Install sysv_ipc.
 
-```pip install sysv_ipc```
+```
+pip install sysv_ipc
+```
 
 2. Add SHM (shared host memory) source to /etc/chrony.conf as preferred:
 
-```refclock SHM 0 poll 3 refid PX4 prefer```
+```
+refclock SHM 0 poll 3 refid PX4 prefer
+```
 
 3. Restart chronyd service
 
-```sudo systemctl restart chronyd```
+```
+sudo systemctl restart chronyd
+```
 
 4. Run the python program 
 
-```python3 sync_mavros_to_chrony.py```
+```
+python3 sync_mavros_to_chrony.py
+```
 
 5. Verify your chrony services in a seperate terminal
 
