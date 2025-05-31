@@ -5,6 +5,9 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy
 import ctypes
 import time
 import sysv_ipc
+import threading
+import subprocess
+from diagnostic_msgs.msg import DiagnosticStatus, KeyValue
 
 # Structure as defined in chrony sources (see chrony/chrony.h)
 class shmTime(ctypes.Structure):
@@ -25,7 +28,7 @@ class shmTime(ctypes.Structure):
 class TimeToSHM(Node):
     def __init__(self):
         super().__init__('time_to_shm')
-        print("[DEBUG] Initializing TimeToSHM node")
+        self.get_logger().debug("Initializing TimeToSHM node")
         qos_profile = QoSProfile(
             depth=10,
             reliability=ReliabilityPolicy.BEST_EFFORT
@@ -37,32 +40,38 @@ class TimeToSHM(Node):
             qos_profile)
         self.shm_key = 0x4e545030  # "NTP0"
         self.shm_size = ctypes.sizeof(shmTime)
-        print(f"[DEBUG] SHM key: {hex(self.shm_key)}, SHM size: {self.shm_size}")
+        self.get_logger().debug(f"SHM key: {hex(self.shm_key)}, SHM size: {self.shm_size}")
         self.attach_shm()
+
+        self._shutdown = False
+        self.monitor_thread = threading.Thread(target=self.monitor_chrony, daemon=True)
+        self.monitor_thread.start()
+
+        self.diagnostic_pub = self.create_publisher(DiagnosticStatus, '/time_sync/diagnostics', 10)
 
     def attach_shm(self):
         try:
-            print("[DEBUG] Trying to create shared memory segment...")
+            self.get_logger().debug("Trying to create shared memory segment...")
             self.shm = sysv_ipc.SharedMemory(self.shm_key, sysv_ipc.IPC_CREAT, size=self.shm_size, mode=0o666)
-            print("[DEBUG] Shared memory segment created.")
+            self.get_logger().debug("Shared memory segment created.")
         except sysv_ipc.PermissionsError:
-            print("[DEBUG] Permissions error: removing existing segment and retrying...")
+            self.get_logger().debug("Permissions error: removing existing segment and retrying...")
             try:
                 existing = sysv_ipc.SharedMemory(self.shm_key)
                 existing.remove()
-                print("[DEBUG] Removed existing shared memory segment.")
+                self.get_logger().debug("Removed existing shared memory segment.")
                 self.shm = sysv_ipc.SharedMemory(self.shm_key, sysv_ipc.IPC_CREAT, size=self.shm_size, mode=0o666)
-                print("[DEBUG] Shared memory segment created after removal.")
+                self.get_logger().debug("Shared memory segment created after removal.")
             except Exception as e:
-                print(f"[ERROR] Failed to remove and recreate SHM: {e}")
+                self.get_logger().error(f"Failed to remove and recreate SHM: {e}")
                 raise
         except sysv_ipc.ExistentialError:
-            print("[DEBUG] Shared memory segment exists, attaching...")
+            self.get_logger().debug("Shared memory segment exists, attaching...")
             self.shm = sysv_ipc.SharedMemory(self.shm_key)
-            print("[DEBUG] Attached to existing shared memory segment.")
+            self.get_logger().debug("Attached to existing shared memory segment.")
 
     def listener_callback(self, msg):
-        print("[DEBUG] Received TimeReference message")
+        self.get_logger().debug("Received TimeReference message")
         sec = msg.time_ref.sec
         nsec = msg.time_ref.nanosec
         now = time.time()
@@ -80,23 +89,73 @@ class TimeToSHM(Node):
         # Synchronization: set valid=0, increment count, write, set valid=1, increment count, write again
         st.valid = 0
         st.count += 1
-        print(f"[DEBUG] Writing to SHM with valid=0, count={st.count}")
+        self.get_logger().debug(f"Writing to SHM with valid=0, count={st.count}")
         self.shm.write(bytes(st))
         st.valid = 1
         st.count += 1
-        print(f"[DEBUG] Writing to SHM with valid=1, count={st.count}")
+        self.get_logger().debug(f"Writing to SHM with valid=1, count={st.count}")
         self.shm.write(bytes(st))
         self.get_logger().info(f"Published time {sec}.{nsec} to chrony SHM")
 
+    def publish_time_sync_diagnostic(self, synced, message):
+        status = DiagnosticStatus()
+        status.name = "PX4 Time Sync"
+        status.hardware_id = "chrony_shm"
+        if synced:
+            status.level = DiagnosticStatus.OK
+            status.message = "PX4 time source synchronized"
+        else:
+            status.level = DiagnosticStatus.WARN
+            status.message = "PX4 time source NOT synchronized"
+        self.diagnostic_pub.publish(status)
+
+    #You need to configure passwordless sudo for this to work without prompting for password
+    #1. Open a terminal and run `sudo visudo`
+    #2. Add the following line at the end of the file: yourusername ALL=NOPASSWD: /bin/systemctl restart chrony
+    def monitor_chrony(self):
+        while not self._shutdown:
+            try:
+                result = subprocess.run(
+                    ["chronyc", "sources", "-v"],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=5
+                )
+                output = result.stdout
+                self.get_logger().info("\nOutput from chronyc sources:" + output)
+                synced = any(line.startswith('#*') and 'PX4' in line for line in output.splitlines())
+                if not synced:
+                    self.get_logger().warn("PX4 time source not synchronized! Restarting chrony...")
+                    self.publish_time_sync_diagnostic(False, synced)
+                    subprocess.run(["sudo", "systemctl", "restart", "chrony"]) 
+                else:
+                    self.get_logger().info("PX4 time source is synchronized.")
+                    self.publish_time_sync_diagnostic(True, synced)
+                time.sleep(30)
+            except Exception as e:
+                self.get_logger().error(f"Error monitoring chrony: {e}")
+                self.publish_time_sync_diagnostic(False, str(e))
+                time.sleep(30)
+
+    def shutdown(self):
+        self.get_logger().info("Shutting down TimeToSHM node...")
+        self._shutdown = True
+        if self.monitor_thread.is_alive():
+            self.monitor_thread.join(timeout=5)
+        self.destroy_node()
+
 def main(args=None):
-    print("[DEBUG] Starting main()")
     rclpy.init(args=args)
     node = TimeToSHM()
-    print("[DEBUG] Spinning node...")
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
-    print("[DEBUG] Shutdown complete.")
+    node.get_logger().debug("Starting main()")
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info("KeyboardInterrupt received. Exiting...")
+    finally:
+        node.shutdown()  # This destroys the node and joins the thread
+        rclpy.shutdown() # Shutdown ROS context last, no logging after this
 
 if __name__ == '__main__':
     main()

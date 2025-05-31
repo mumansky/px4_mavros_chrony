@@ -7,6 +7,20 @@ A simple MAVROS to chrony forwarder for synchronizing an FCU to a companion comp
 * Your autopilot has a GPS lock and valid timesync
 
 ## Installation
+0. Add `systemctl restart` to passwordless sudo
+
+Edit the `sudoers` file:
+```
+sudo visudo
+```
+
+Add the following line at the end, replacing `yourusername` with your actual Linux username and `/bin/systemctl` with the actual path to `systemctl`, use `which systemctl` to check:
+```
+yourusername ALL=NOPASSWD: /bin/systemctl restart chrony
+```
+Save and exit the `sudoers` file
+
+
 1. Install sysv_ipc.
 
 ```
