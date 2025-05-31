@@ -85,6 +85,11 @@ Update interval : 8.0 seconds
 Leap status     : Normal
 ```
 
+6. If `chronyc sources` shows an `x`, `~`, or `?` for the `PX4` source, try restarting the `chronyd` service:
+```
+sudo systemctl restart chronyd
+```
+
 # What this doesn't do (yet)?
 * Check for valid time sync on the autopilot
 * Handle any kind of interruptions or disconnects
